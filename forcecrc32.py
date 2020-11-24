@@ -20,43 +20,115 @@
 # If not, see <http://www.gnu.org/licenses/>.
 # 
 
-import os, sys, zlib, argparse, re, pprint
+import os, sys, zlib, argparse
 from sys import version
 from typing import BinaryIO, List, Optional, Tuple
 
-__version__ = "1.00.0"
+__version__ = "1.00.1"
 
 # ---- Constants ----
 def constant(f):
+	"""`constant` Decorator for constant property
+
+	Makes a constant property
+	"""
+
 	def f_set(self, value):
+		"""`f_set` Setter for constant property
+
+		Setter for constant property
+
+		Args:
+		- `value` (`[type]`): value the caller wants to set
+
+		Raises:
+		``
+		- `TypeError`: Error because you can't set a constant
+		"""		
 		raise TypeError
+
 	def f_get(self):
+		"""`f_get` Getter for property
+
+		Getter for property
+
+		Returns:
+		- `[type]`: Value of the constant
+		"""		
 		return f()
+	
 	return property(f_get, f_set)
 
 class _Const(object):
+	"""`_Const` Set of Constants
+
+	This class uses properties as constants. There is no setter so constant
+	values cannot be changed.
+	"""	
+
 	@constant
 	def POLYNOMIAL() -> int:
-		# Generator polynomial. Do not modify, because there are many dependencies
+		"""`POLYNOMIAL` Generator polynomial
+
+		Polynomial for CRC calculation. Do not modify.
+
+		Returns:
+		- `int`: 0x104C11DB7
+		"""		
+		# Generator polynomial. 
 		return 0x104C11DB7
 
 	@constant
 	def MAX_VALUE() -> int:
+		"""`MAX_VALUE` [summary]
+
+		[extended_summary]
+
+		Returns:
+		- `int`: [description]
+		"""		
 		return (1 << 32) - 1
 	
 	@constant
 	def MIN_VALUE() -> int:
+		"""`MIN_VALUE` [summary]
+
+		[extended_summary]
+
+		Returns:
+		- `int`: [description]
+		"""		
 		return -1 * (1 << 31)
 	
 	@constant
 	def VERSION() -> str:
-		return "1.0"
+		"""`VERSION` [summary]
+
+		[extended_summary]
+
+		Returns:
+		- `str`: __version__
+		"""		
+		return __version__
 
 CONST = _Const()
 
 # ---- ArgParse Functions ----
-class SmartFormatter(argparse.ArgumentDefaultsHelpFormatter): 
-	def add_text(self, text):
+class TextNlDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter): 
+	"""`TextNlDefaultsHelpFormatter` Allows newlines in the help summary and epilog
+
+	You can create newlines in the summary or epilog for argparse using `\\0` to
+	add a new line. This Formatter inherits from `argparse.ArgumentDefaultsHelperFormatter`.
+	Three or more `\\0` in a row will be consolidated down to two.
+	"""	
+	def add_text(self, text: str):
+		"""`add_text` Override of the add text function
+
+		This is where the text is split into multiple items
+
+		Args:
+		- `text` (`str`): Text to split
+		"""
 		try:
 			for line in text.split("\0"):
 				super().add_text(line)
@@ -65,7 +137,7 @@ class SmartFormatter(argparse.ArgumentDefaultsHelpFormatter):
 
 def crc_value(value: str) -> int:
 	result:int = int(value, 0)
-	if CONST.MIN_VALUE <= result and CONST.MAX_VALUE >= result:
+	if CONST.MIN_VALUE > result or CONST.MAX_VALUE < result:
 		raise argparse.ArgumentTypeError("CRC must be a 32-bit value")
 	if 0 > result:
 		return result & CONST.MASK
@@ -74,6 +146,14 @@ def crc_value(value: str) -> int:
 # ---- Main application ----
 
 def main() -> Optional[str]:
+	"""`main` main function
+
+	This does the actual argument parsing, then calls to other functions to modify the
+	file.
+
+	Returns:
+	- `Optional[str]`: Any errors that were generated
+	"""	
 	try:
 		parser = argparse.ArgumentParser(
 			prog="forcecrc32",
@@ -86,9 +166,9 @@ def main() -> Optional[str]:
 										max_value=CONST.MAX_VALUE,
 										min_value_hex="0x{v:08X}".format(v=0),
 										max_value_hex="0x{v:08X}".format(v=CONST.MAX_VALUE)),
-			formatter_class=SmartFormatter)
+			formatter_class=TextNlDefaultsHelpFormatter)
 		parser.add_argument('-v', '--version', action='version',
-				version='%(prog)s {version} Copyright (c) 2020 scott@kins.dev'.format(version=__version__))
+				version='%(prog)s {version}'.format(version=CONST.VERSION))
 		parser.add_argument("file", type=str, help="File to open")
 		parser.add_argument("crc", type=crc_value, help="Target crc. Use 0x to prefix a hex value")
 		parser.add_argument("offset", type=int, nargs='?',default=0, help="Where to write the new data (default 0)")
@@ -113,6 +193,24 @@ def main() -> Optional[str]:
 # Public library function. offset is uint, and newcrc is uint32.
 # May raise IOError, ValueError, AssertionError.
 def modify_file_crc32(path: str, offset: int, target_crc: int, printstatus: bool = False) -> None:
+	"""`modify_file_crc32` Modifies (or creates) the file with the specified CRC
+
+	Will modify or create the file with the specified CRC
+
+	Args:
+	- `path` (`str`): File location
+	- `offset` (`int`): Where to modify in the file
+	- `target_crc` (`int`): The CRC it should match
+	- `printstatus` (`bool`, optional): Print out messages to the user. Defaults to `False`.
+
+	Raises:
+	``
+	- `ValueError`: Error if the location is not at least 4 bytes before the end of the file
+	`
+	- `IOError`: Error reading to or writing the file
+	`
+	- `AssertionError`: Error if the CRC does not match when done
+	"""	
 	if not os.path.exists(path) and 0 == offset:
 		if printstatus:
 			print("File does not exist, creating 4 byte file")
